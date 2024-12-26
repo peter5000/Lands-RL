@@ -1,0 +1,21 @@
+NUM_ELEMENTS = 5
+NUM_CARDS = 5
+
+# ELEMENTS
+GRASS = 1
+YELLOW = 2
+FIRE = 3
+DARK = 4
+WATER = 5
+
+# ANYONE = None
+# NOONE = -1
+
+# BLACK = 0
+# WHITE = 1
+# TURN_CHNL = 2
+# INVD_CHNL = 3
+# PASS_CHNL = 4
+# DONE_CHNL = 5
+
+# NUM_CHNLS = 6
