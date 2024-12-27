@@ -17,9 +17,9 @@ class LandsEnv(gym.Env):
         # 5 colors, 5 cards, own hand + 2 fields
         self.observation_space = Box(low=0, high=5, shape=(3,5), dtype=np.int8)
 
-        # 0=Green, 1=Yellow, 2=Red, 3=Dark, 4=Water, 5=Pass
+        # 0=Pass, 1=Green, 2=Yellow, 3=Red, 4=Dark, 5=Water
         # Prob need tuple or something for card effects
-        self.action_space = Discrete(6)
+        self.action_space = Box(low=0, high=5, shape=(2), dtype=np.int8)
 
         # 0=p1, 1=p2
         self.turn = 0
@@ -35,12 +35,12 @@ class LandsEnv(gym.Env):
 
         # Game variables initialization
         self.field = np.zeros((2, lv.NUM_ELEMENTS))       # p1 = first row, p2 = second row
-        self.p1 = {"field": np.zeros((2, lv.NUM_ELEMENTS)), "hand": np.zeros((lv.NUM_ELEMENTS)), "discard": np.zeros((lv.NUM_ELEMENTS)), "deck": None}
-        self.p2 = {"field": np.zeros((2, lv.NUM_ELEMENTS)), "hand": np.zeros((lv.NUM_ELEMENTS)), "discard": np.zeros((lv.NUM_ELEMENTS)), "deck": None}
+        self.p1 = {"field": np.zeros(lv.NUM_ELEMENTS), "hand": np.zeros((lv.NUM_ELEMENTS)), "discard": np.zeros((lv.NUM_ELEMENTS)), "deck": None}
+        self.p2 = {"field": np.zeros(lv.NUM_ELEMENTS), "hand": np.zeros((lv.NUM_ELEMENTS)), "discard": np.zeros((lv.NUM_ELEMENTS)), "deck": None}
         self._init_deck(self.p1)
         self._init_deck(self.p2)
-        self.draw_n(self.p1, self.start_hand)
-        self.draw_n(self.p2, self.start_hand)
+        self._draw_n(self.p1, self.start_hand)
+        self._draw_n(self.p2, self.start_hand)
 
     # Shuffle the deck
     def _shuffle_deck(self, player):
@@ -53,26 +53,30 @@ class LandsEnv(gym.Env):
 
     # Add all cards in discard pile to the deck and shuffle
     # return (new_deck, new_discard)
-    def putDiscardToDeck(self, player):
+    def _put_discard_to_deck(self, player):
         player["deck"].append(np.array([[n+1]*i for n, i in enumerate(player["discard"])]).reshape(-1))
         player["discard"].fill(0)
         self._shuffle_deck(player)
 
     # Draw one card from the deck to the hand
-    def draw_n(self, player, n=1):
+    def _draw_n(self, player, n=1):
         if len(player["deck"]) < 1:
-            self.putDiscardToDeck(player)
+            self._put_discard_to_deck(player)
             assert len(player["deck"]) > 0    # We want deck to contain at least 1 card
         for i in range(n):
             player["hand"][player["deck"][i]-1] += 1
         player["deck"] = player["deck"][n:]
 
     # reset state of a player
-    def resetStates(self, player):
+    def _reset_states(self, player):
         player["hand"].fill(0)
         player["discard"].fill(0)
         self._init_deck(player)
-        self.draw_n(player, self.start_hand)
+        self._draw_n(player, self.start_hand)
+
+    # TODO: Move validation function
+
+    # TODO: Play a card
 
     # TODO: unimplemented
     def reset(self, seed=None, options=None):
@@ -98,14 +102,6 @@ class LandsEnv(gym.Env):
 
     # TODO: unimplemented
     def step(self, action):
-        (
-            assignment_type,
-            grid_list_index,
-            grid_index,
-            rhs_function,
-            rhs_arg1,
-            rhs_arg2,
-        ) = action
         # update state
 
         # get observation
