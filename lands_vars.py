@@ -1,5 +1,7 @@
 NUM_ELEMENTS = 5
 NUM_CARDS = 5
+START_HAND = 5
+PLAYER_COUNT = 2
 
 # ELEMENTS
 GRASS = 1
@@ -7,6 +9,7 @@ YELLOW = 2
 FIRE = 3
 DARK = 4
 WATER = 5
+ELEMENTS = ["grass", "yellow", "fire", "dark", "water"]
 
 # ANYONE = None
 # NOONE = -1
