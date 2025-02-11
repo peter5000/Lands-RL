@@ -7,6 +7,7 @@ from gymnasium.spaces import Box, Discrete
 from pettingzoo import AECEnv
 from pettingzoo.utils import agent_selector, wrappers
 import lands_vars as lv
+import lands_game as game
 
 def env(render_mode=None):
     """
@@ -23,7 +24,7 @@ def env(render_mode=None):
     env = wrappers.AssertOutOfBoundsWrapper(env)
     # Provides a wide vareity of helpful user errors
     # Strongly recommended
-    env = wrappers.OrderEnforcingWrapper(env)
+    # env = wrappers.OrderEnforcingWrapper(env)
     return env
 
 
@@ -58,57 +59,14 @@ class raw_env(AECEnv):
         )
 
         # optional: we can define the observation and action spaces here as attributes to be used in their corresponding methods
-        self._action_spaces = {agent: Box(low=1, high=5, shape=(2)) for agent in self.possible_agents}
+        self._action_spaces = {agent: Box(low=1, high=5, shape=(1,2), dtype=np.int8) for agent in self.possible_agents}
         self._observation_spaces = {
             agent: Box(low=0, high=5, shape=(3,5), dtype=np.int8) for agent in self.possible_agents
         }
         self.render_mode = render_mode
 
-        # Game meta variables initialization
-        self.num_elements = lv.NUM_ELEMENTS
-        self.num_cards = 5
-        self.start_hand = 5
-
         # Game variables initialization
-        # self.field = np.zeros((2, lv.NUM_ELEMENTS))       # p1 = first row, p2 = second row
-        self.p1 = {"field": np.zeros(lv.NUM_ELEMENTS), "hand": np.zeros((lv.NUM_ELEMENTS)), "discard": np.zeros((lv.NUM_ELEMENTS)), "deck": None}
-        self.p2 = {"field": np.zeros(lv.NUM_ELEMENTS), "hand": np.zeros((lv.NUM_ELEMENTS)), "discard": np.zeros((lv.NUM_ELEMENTS)), "deck": None}
-        self._init_deck(self.p1)
-        self._init_deck(self.p2)
-        self._draw_n(self.p1, self.start_hand)
-        self._draw_n(self.p2, self.start_hand)
-
-    # Shuffle the deck
-    def _shuffle_deck(self, player):
-        np.random.shuffle(player["deck"])
-
-    # Initialize deck
-    def _init_deck(self, player):
-        player["deck"] = np.array([(i)//(self.num_cards) + 1 for i in range(self.num_elements*self.num_cards)])
-        self._shuffle_deck(player)
-
-    # Add all cards in discard pile to the deck and shuffle
-    # return (new_deck, new_discard)
-    def _put_discard_to_deck(self, player):
-        player["deck"].append(np.array([[n+1]*i for n, i in enumerate(player["discard"])]).reshape(-1))
-        player["discard"].fill(0)
-        self._shuffle_deck(player)
-
-    # Draw one card from the deck to the hand
-    def _draw_n(self, player, n=1):
-        if len(player["deck"]) < 1:
-            self._put_discard_to_deck(player)
-            assert len(player["deck"]) > 0    # We want deck to contain at least 1 card
-        for i in range(n):
-            player["hand"][player["deck"][i]-1] += 1
-        player["deck"] = player["deck"][n:]
-
-    # reset state of a player
-    def _reset_states(self, player):
-        player["hand"].fill(0)
-        player["discard"].fill(0)
-        self._init_deck(player)
-        self._draw_n(player, self.start_hand)
+        self.game = game.LandsGame()
 
     @functools.lru_cache(maxsize=None)
     def observation_space(self, agent):
@@ -116,8 +74,9 @@ class raw_env(AECEnv):
 
     @functools.lru_cache(maxsize=None)
     def action_space(self, agent):
-        return Box(low=0, high=5, shape=(2))
+        return Box(low=1, high=5, shape=(1,2), dtype=np.int8)
 
+    # TODO
     def render(self):
         """
         Renders the environment. In human mode, it can print to terminal, open
@@ -131,7 +90,7 @@ class raw_env(AECEnv):
 
         if len(self.agents) == 2:
             string = "Current player: {}, Current Board: {}".format(
-                self.agent_selection, np.concatenate((self.p1["hand"], self.p1["field"], self.p2["field"], self.p2["hand"]))
+                self.agent_selection, self.game._get_board()
             )
         else:
             string = "Game over"
@@ -144,7 +103,7 @@ class raw_env(AECEnv):
         at any time after reset() is called.
         """
         # observation of one agent is the previous state of the other
-        return np.array(self.observations[agent])
+        return np.stack((self.game.players[0]["hand"], self.game.players[0]["field"], self.game.players[1]["field"])) if agent == self.agents[0] else np.stack((self.game.players[1]["hand"], self.game.players[1]["field"], self.game.players[0]["field"]))
 
     def close(self):
         """
@@ -174,8 +133,10 @@ class raw_env(AECEnv):
         self.terminations = {agent: False for agent in self.agents}
         self.truncations = {agent: False for agent in self.agents}
         self.infos = {agent: {} for agent in self.agents}
-        self.state = {agent: NONE for agent in self.agents}
-        self.observations = {agent: NONE for agent in self.agents}
+        # self.state = {agent: None for agent in self.agents}
+        # TODO reset game
+        self.game.reset_game()
+        self.observations = {agent: None for agent in self.agents}
         self.num_moves = 0
         """
         Our agent_selector utility allows easy cyclic stepping through the agents list.
@@ -212,32 +173,46 @@ class raw_env(AECEnv):
         # agent should start again at 0
         self._cumulative_rewards[agent] = 0
 
-        # stores action of current agent
-        self.state[self.agent_selection] = action
+        # # stores action of current agent
+        # print(self.state)
+        # self.state[self.agent_selection] = action
 
-        # collect reward if it is the last agent to act
-        if self._agent_selector.is_last():
-            # rewards for all agents are placed in the .rewards dictionary
-            self.rewards[self.agents[0]], self.rewards[self.agents[1]] = REWARD_MAP[
-                (self.state[self.agents[0]], self.state[self.agents[1]])
-            ]
+        # Make a move inside the game
+        self.game.play_card(action[0])
 
+        # collect reward if the player is on a winning state
+        if self.game.gameover:
+            self.rewards[self.agents[self.game.winner]], self.rewards[self.agents[1-self.game.winner]] = (1, -1)
+            self.terminations ={agent: True for agent in self.terminations}
             self.num_moves += 1
-            # The truncations dictionary must be updated for all players.
+            # Stop if played 1000 moves
             self.truncations = {
-                agent: self.num_moves >= NUM_ITERS for agent in self.agents
+                agent: self.num_moves >= 1000 for agent in self.agents
             }
+            for agent in self.agents:
+                self.observations[agent] = self.observe(agent)
+        # if self._agent_selector.is_last():
+        #     # rewards for all agents are placed in the .rewards dictionary
+        #     self.rewards[self.agents[0]], self.rewards[self.agents[1]] = REWARD_MAP[
+        #         (self.state[self.agents[0]], self.state[self.agents[1]])
+        #     ]
 
-            # observe the current state
-            for i in self.agents:
-                self.observations[i] = self.state[
-                    self.agents[1 - self.agent_name_mapping[i]]
-                ]
-        else:
-            # necessary so that observe() returns a reasonable observation at all times.
-            self.state[self.agents[1 - self.agent_name_mapping[agent]]] = NONE
-            # no rewards are allocated until both players give an action
-            self._clear_rewards()
+        #     self.num_moves += 1
+        #     # The truncations dictionary must be updated for all players.
+        #     self.truncations = {
+        #         agent: self.num_moves >= NUM_ITERS for agent in self.agents
+        #     }
+
+        #     # observe the current state
+        #     for i in self.agents:
+        #         self.observations[i] = self.state[
+        #             self.agents[1 - self.agent_name_mapping[i]]
+        #         ]
+        # else:
+        #     # necessary so that observe() returns a reasonable observation at all times.
+        #     self.state[self.agents[1 - self.agent_name_mapping[agent]]] = NONE
+        #     # no rewards are allocated until both players give an action
+        #     self._clear_rewards()
 
         # selects the next agent.
         self.agent_selection = self._agent_selector.next()

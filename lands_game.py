@@ -8,9 +8,11 @@ class LandsGame():
     self.num_cards = num_cards
     self.start_hand = start_hand
     self.player_count = player_count
+
     self.gameover = False
     # 0 = player1, 1 = player2
     self.turn = 0
+    self.winner = None
 
     # Game variables initialization
     # self.field = np.zeros((2, lv.NUM_ELEMENTS))       # p1 = first row, p2 = second row
@@ -65,6 +67,7 @@ class LandsGame():
       self._reset_states(i)
     self.turn = 0
     self.gameover = False
+    self.winner = None
     # self._reset_states(self.p1)
     # self._reset_states(self.p2)
 
@@ -118,9 +121,13 @@ class LandsGame():
   # check for a win con and return a player number of the winner else none
   def win(self):
     if np.any(self.players[0]["field"] == self.num_cards) or np.all(self.players[0]["field"] > 0):
-      return 1
+      # self.gameover = True
+      self.winner = 0
+      return 0
     elif np.any(self.players[1]["field"] == self.num_cards) or np.all(self.players[1]["field"] > 0):
-      return 2
+      # self.gameover = True
+      self.winner = 1
+      return 1
     return None
 
   # plays a card and change the state of the game accordingly
@@ -139,6 +146,7 @@ class LandsGame():
           else:
             print("INVALID MOVE")
             self.gameover = True
+            self.winner = 1 - curr_player
             return self._get_board()
         case lv.YELLOW, target:
           self.draw_n(curr_player)
@@ -148,6 +156,7 @@ class LandsGame():
           else:
             print("INVALID MOVE")
             self.gameover = True
+            self.winner = 1 - curr_player
             return self._get_board()
         # TODO Make it selectable
         case lv.DARK, target:
@@ -166,21 +175,28 @@ class LandsGame():
           pass
         case _: # invalid move
           print("INVALID MOVE!!")
+          self.winner = 1 - curr_player
           self.gameover = True
     else:
+      self.winner = 1 - curr_player
       self.gameover = True
 
     # If game has not ended by invalid move, play the card to the field
     if not self.gameover:
       self._move_x_to_x(curr_player, "hand", "field", action[0])
-      self.turn = 1-curr_player
       # player["hand"][action[0]-1] -= 1
       # player["field"][action[0]-1] += 1
 
     # Check for a win
     win = self.win()
-    if win is not None:
-      print(f"Player {win} won!")
+    if win != None:
+      self.gameover = True
+      self.winner = win
+      print(f"Player {win+1} won!")
+    else:
+      # Continue the game
+      self.turn = 1 - self.turn
+      self.draw_n(self.turn)
 
     return self._get_board()  # Return board for a debugging purpose
 
