@@ -185,7 +185,11 @@ class LandsGame():
   def counter_choices(self, player):
     legal_moves = []
     # if the player has a water card and the card the opponent played
-    if self.players[player]["hand"][lv.WATER] > 0 and self.players[player]["hand"][self.playing[-1]] > 0:
+    # TODO fix for case for 2 water as they only need 1 now
+    countered_card = self.players[player]["hand"][self.playing[-1]]
+    num_water = self.players[player]["hand"][lv.WATER]
+    needed_water = 2 if self.playing[-1] == lv.WATER else 1
+    if num_water >= needed_water and countered_card > 0:
       legal_moves.append(("counter", 1))
     legal_moves.append(("counter", 0))
     return legal_moves
