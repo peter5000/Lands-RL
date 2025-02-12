@@ -1,9 +1,15 @@
+# noqa: D212, D415
 """
-# Lands
+# Connect Four
 
-UPDATE TABLE BELOW
+```{figure} classic_connect_four.gif
+:width: 140px
+:name: connect_four
+```
 
-| Import             | `from pettingzoo.classic` |
+This environment is part of the <a href='..'>classic environments</a>. Please read that page first for general information.
+
+| Import             | `from pettingzoo.classic import connect_four_v3` |
 |--------------------|--------------------------------------------------|
 | Actions            | Discrete                                         |
 | Parallel API       | Yes                                              |
@@ -16,11 +22,10 @@ UPDATE TABLE BELOW
 | Observation Values | [0,1]                                            |
 
 
-ADD DESCRIPTION OF LANDS GAME HERE
+Connect Four is a 2-player turn based game, where players must connect four of their tokens vertically, horizontally or diagonally. The players drop their respective token in a column of a standing grid, where each token will fall until it reaches the bottom of the column or reaches an existing
+token. Players cannot place a token in a full column, and the game ends when either a player has made a sequence of 4 tokens, or when all 7 columns have been filled.
 
 ### Observation Space
-
-ADD NOTES ON OBSERVATION SPACE HERE
 
 The observation is a dictionary which contains an `'observation'` element which is the usual RL observation described below, and an  `'action_mask'` which holds the legal moves, described in the Legal Actions Mask section.
 
@@ -31,21 +36,15 @@ that cell. A 0 means that either the cell is empty, or the other agent has a tok
 
 #### Legal Actions Mask
 
-ADD NOTES ON LEGAL ACTIONS MASK HERE
-
 The legal moves available to the current agent are found in the `action_mask` element of the dictionary observation. The `action_mask` is a binary vector where each index of the vector represents whether the action is legal or not. The `action_mask` will be all zeros for any agent except the one
 whose turn it is. Taking an illegal move ends the game with a reward of -1 for the illegally moving agent and a reward of 0 for all other agents.
 
 
 ### Action Space
 
-ADD NOTES ON ACTION SPACE HERE
-
 The action space is the set of integers from 0 to 6 (inclusive), where the action represents which column a token should be dropped in.
 
 ### Rewards
-
-ADD NOTES ON REWARDS HERE
 
 If an agent successfully connects four of their tokens, they will be rewarded 1 point. At the same time, the opponent agent will be awarded -1 points. If the game ends in a draw, both players are rewarded 0.
 
@@ -64,7 +63,7 @@ import os
 
 import gymnasium
 import numpy as np
-import pygamew
+import pygame
 from gymnasium import spaces
 from gymnasium.utils import EzPickle
 
@@ -72,7 +71,7 @@ from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
 from pettingzoo.utils.agent_selector import AgentSelector
 
-from lands_game import LandsGame
+import lands_game as lg
 import lands_vars as lv
 
 
@@ -97,8 +96,6 @@ def env(**kwargs):
 
 
 class raw_env(AECEnv, EzPickle):
-
-    # UPDATE METADATA
     metadata = {
         "render_modes": ["human", "rgb_array"],
         "name": "connect_four_v3",
@@ -109,9 +106,6 @@ class raw_env(AECEnv, EzPickle):
     def __init__(self, render_mode: str | None = None, screen_scaling: int = 9):
         EzPickle.__init__(self, render_mode, screen_scaling)
         super().__init__()
-        
-        # UPDATE NOTES HERE
-
         # 6 rows x 7 columns
         # blank space = 0
         # agent 0 -- 1
@@ -121,121 +115,24 @@ class raw_env(AECEnv, EzPickle):
         self.render_mode = render_mode
         self.screen_scaling = screen_scaling
 
-
         self.board = [0] * (6 * 7)
 
         self.agents = ["player_0", "player_1"]
         self.possible_agents = self.agents[:]
 
-
-        # Game
-        self.game = LandsGame()
-
-        # COME BACK TO THIS
-        self.num_elements = num_elements
-        self.num_cards = num_cards
-        self.start_hand = start_hand
-
-        # 0=Green, 1=Yellow, 2=Red, 3=Dark, 4=Water
-
-        # Game variables initialization
-        
-        # initialize the boards
-        # self.boards = [
-        #     {
-        #         "field": np.zeros((2, lv.NUM_ELEMENTS)),
-        #         "hand": np.zeros((lv.NUM_ELEMENTS)),
-        #         "discard": np.zeros((lv.NUM_ELEMENTS)),
-        #         "deck": None
-        #     }
-        # ] * 2
-        
-        # quantity of each revealed at index between 0-5
-        self.revealed_cards = np.zeros((1, lv.NUM_ELEMENTS)) 
-
-        # # initialize the decks
-        # self._init_deck(self.p1)
-        # self._init_deck(self.p2)
-
-        # draw the starting hands
-        self.draw_n(self.p1, self.start_hand)
-        self.draw_n(self.p2, self.start_hand)
-
-        # initialize the current action
-        self.curr_action = None
-
-        # revealed cards for black
-        self.revealed_cards = np.zeros((1, lv.NUM_ELEMENTS))
-
-
-        # play a card and choose a target for red / green
-        # choose to keep the card on top of the deck or put it to the bottom (if playing blue)
-        # choose 3 cards from the hand (if the opponent played a black)
-        # choose 1 of the 3 cards the opponent revealed (if the opponent played chose cards for a black)
-        # counter with a blue (if the user has a blue and the card the opponent played available in hand)
-
-
-        # DO WE NEED PASS???
-
-        # 0=Green, 1=Yellow, 2=Red, 3=Dark, 4=Water
-
-        # 
-        self.action_spaces = {
-            # play a card
-            # choose 3 cards from the hand (if the opponent played a black)
-            # choose 1 of the 3 cards the opponent revealed (if the opponent played chose cards for a black)
-            # counter with a blue (if the user has a blue and the card the opponent played available in hand)
-            # target card
-            # keep card on top of deck or put it to the bottom (0 is keep, 1 is put it on the bottom)
-            agent: spaces.Dict({
-                "play_card": spaces.Discrete(5),
-                "reveal": spaces.Box(low=0, high=3, shape=(5,), dtype=np.int8),
-                "pick": spaces.Discrete(5),
-                "counter": spaces.Discrete(1),
-                "target": spaces.Box(low=0, high=4, shape=(5,), dtype=np.int8),
-                "keep": spaces.Discrete(2)
-            })
-            for agent in self.agents
-        }
-
+        self.action_spaces = {i: spaces.Discrete(7) for i in self.agents}
         self.observation_spaces = {
-            agent: spaces.Dict(
-            {
-                # hand of the current player,
-                # current board of P1,
-                # current board of P2,
-                # discard of P1,
-                # discard of P2,
-                # current action
-                # target of opponent's action
-                # cards revealed by opponent for black
-                "observation": spaces.Dict({
-                "curr_hand": spaces.Box(low=0, high=5, shape=(5,), dtype=np.int8),
-                "curr_board": spaces.Box(low=0, high=5, shape=(5,), dtype=np.int8),
-                "opp_board": spaces.Box(low=0, high=5, shape=(5,), dtype=np.int8),
-
-                # agent can infer from cards played and actions taken
-                # "curr_discard": spaces.Box(low=0, high=5, shape=(5,), dtype=np.int8),
-                # "opp_discard": spaces.Box(low=0, high=5, shape=(5,), dtype=np.int8),
-                
-                # 0=Green, 1=Yellow, 2=Red, 3=Dark, 4=Water, 5=No action, 6=Counter, 
-                "curr_action": spaces.Discrete(7),
-                "opp_revealed": spaces.Box(low=0, high=3, shape=(5,), dtype=np.int8)
-                }),
-
-                # mask of legal moves
-                "action_mask": spaces.Dict({
-                    "play_card": spaces.Box(low=0, high=1, shape=(5,2), dtype=np.int8),
-                    "reveal": spaces.Box(low=0, high=1, shape=(5,), dtype=np.int8),
-                    "pick": spaces.Box(low=0, high=1, shape=(5,), dtype=np.int8),
-                    "counter": spaces.Box(low=0, high=1, shape=(1,), dtype=np.int8),
-                })
-            }
+            i: spaces.Dict(
+                {
+                    "observation": spaces.Box(
+                        low=0, high=1, shape=(6, 7, 2), dtype=np.int8
+                    ),
+                    "action_mask": spaces.Box(low=0, high=1, shape=(7,), dtype=np.int8),
+                }
             )
-            for agent in self.agents
+            for i in self.agents
         }
 
-        # DON'T HAVE HUMAN MODE YET -- FIGURE THIS OUT
         if self.render_mode == "human":
             self.clock = pygame.time.Clock()
 
@@ -253,16 +150,12 @@ class raw_env(AECEnv, EzPickle):
     #        [2, 0, 0, 0, 1, 1, 0],
     #        [1, 1, 2, 1, 0, 1, 0]], dtype=int8)
     def observe(self, agent):
-        # UPDATE THIS
         board_vals = np.array(self.board).reshape(6, 7)
-
-        # get current player index
         cur_player = self.possible_agents.index(agent)
-        # get opposing player index
         opp_player = (cur_player + 1) % 2
 
-        cur_p_board = self.game.players[cur_player]
-        opp_p_board = self.boards[opp_player]
+        cur_p_board = np.equal(board_vals, cur_player + 1)
+        opp_p_board = np.equal(board_vals, opp_player + 1)
 
         observation = np.stack([cur_p_board, opp_p_board], axis=2).astype(np.int8)
         legal_moves = self._legal_moves() if agent == self.agent_selection else []
@@ -272,35 +165,6 @@ class raw_env(AECEnv, EzPickle):
             action_mask[i] = 1
 
         return {"observation": observation, "action_mask": action_mask}
-    # # Key
-    # # ----
-    # # blank space = 0
-    # # agent 0 = 1
-    # # agent 1 = 2
-    # # An observation is list of lists, where each list represents a row
-    # #
-    # # array([[0, 1, 1, 2, 0, 1, 0],
-    # #        [1, 0, 1, 2, 2, 2, 1],
-    # #        [0, 1, 0, 0, 1, 2, 1],
-    # #        [1, 0, 2, 0, 1, 1, 0],
-    # #        [2, 0, 0, 0, 1, 1, 0],
-    # #        [1, 1, 2, 1, 0, 1, 0]], dtype=int8)
-    # def observe(self, agent):
-    #     board_vals = np.array(self.board).reshape(6, 7)
-    #     cur_player = self.possible_agents.index(agent)
-    #     opp_player = (cur_player + 1) % 2
-
-    #     cur_p_board = np.equal(board_vals, cur_player + 1)
-    #     opp_p_board = np.equal(board_vals, opp_player + 1)
-
-    #     observation = np.stack([cur_p_board, opp_p_board], axis=2).astype(np.int8)
-    #     legal_moves = self._legal_moves() if agent == self.agent_selection else []
-
-    #     action_mask = np.zeros(7, "int8")
-    #     for i in legal_moves:
-    #         action_mask[i] = 1
-
-    #     return {"observation": observation, "action_mask": action_mask}
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]
@@ -309,43 +173,7 @@ class raw_env(AECEnv, EzPickle):
         return self.action_spaces[agent]
 
     def _legal_moves(self):
-        # old
-        # return [i for i in range(7) if self.board[i] == 0]
-
-        g = self.game
-
-        legal_moves = []
-
-        # case where opponent is playing black and you still need to choose 3 cards
-        if np.sum(g.revealed_cards) == 0 and g.playing == lv.DARK and self.sub_turn != self.turn:
-            # legal_moves += [{"reveal:" [a, b, c, d, e]}] 
-            for i in range(min(3 - sum(reveal), g.players[g.turn]["hand"][0])):
-                reveal = [0, 0, 0, 0, 0]
-                reveal[0] = i
-                for j in range(min(3 - sum(reveal), g.players[g.turn]["hand"][1])):
-                    reveal[1] = j
-                    for k in range(min(3 - sum(reveal), g.players[g.turn]["hand"][2])):
-                        reveal[2] = k
-                        for m in range(min(3 - sum(reveal), g.players[g.turn]["hand"][3])):
-                            reveal[3] = m
-                            for n in range(min(3 - sum(reveal), g.players[g.turn]["hand"][4])):
-                                reveal[4] = n
-                legal_moves.append({"reveal": reveal})
-        
-        # case where opponent is playing black and you need to pick a card
-        elif np.sum(g.revealed_cards) != 0 and g.playing == lv.DARK and self.sub_turn == self.turn:
-            legal_moves.append({"pick": i} for i in range(5) if g.revealed_cards[i] > 0)
-        
-        # case where opponent is playing a card and you have the chance to counter
-        elif g.sub_turn != g.turn and g.players[g.turn]["hand"][lv.WATER] > 0:
-            legal_moves.append({"counter": 1})
-
-        # case where it is your turn and you need to play a card
-        elif g.sub_turn == g.turn:
-            legal_moves.append({"play_card": i} for i in range(5) if g.players[g.turn]["hand"][i] > 0)
-
-        
-        
+        return [i for i in range(7) if self.board[i] == 0]
 
     # action in this case is a value from 0 to 6 indicating position to move on the flat representation of the connect4 board
     def step(self, action):

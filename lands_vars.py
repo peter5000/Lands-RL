@@ -4,12 +4,18 @@ START_HAND = 5
 PLAYER_COUNT = 2
 
 # ELEMENTS
-GRASS = 1
-YELLOW = 2
-FIRE = 3
-DARK = 4
-WATER = 5
+GRASS = 0
+YELLOW = 1
+FIRE = 2
+DARK = 3
+WATER = 4
 ELEMENTS = ["grass", "yellow", "fire", "dark", "water"]
+
+# COUNTER = 0
+# REVEAL = 1
+# PLAY_CARD = 2
+# MOVE = 3
+# RESOLVE_CARD = 4
 
 # ANYONE = None
 # NOONE = -1
