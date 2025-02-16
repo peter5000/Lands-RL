@@ -188,12 +188,11 @@ class raw_env(AECEnv, EzPickle):
             # target card
             # keep card on top of deck or put it to the bottom (0 is keep, 1 is put it on the bottom)
             agent: spaces.Dict({
-                "play_card": spaces.Discrete(5),
-                "reveal": spaces.Box(low=0, high=3, shape=(5,), dtype=np.int8),
-                "pick": spaces.Discrete(5),
-                "counter": spaces.Discrete(1),
-                "target": spaces.Box(low=0, high=4, shape=(5,), dtype=np.int8),
-                "keep": spaces.Discrete(2)
+                "action": spaces.Discrete(4), # action type (play_card, reveal, resolve_card, counter)
+                "play_card": spaces.Discrete(5), # card you are playing
+                "counter": spaces.Discrete(1), # counter the opponent's action
+                "reveal": spaces.Box(low=0, high=3, shape=(5,), dtype=np.int8), # cards you are revealing
+                "resolve_card": spaces.Discrete(5), # target of your resolve
             })
             for agent in self.agents
         }

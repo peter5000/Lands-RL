@@ -69,9 +69,9 @@ from gymnasium.utils import EzPickle
 
 from pettingzoo import AECEnv
 from pettingzoo.utils import wrappers
-from pettingzoo.utils.agent_selector import AgentSelector
+from pettingzoo.utils.agent_selector import agent_selector as AgentSelector
 
-import lands_game as lg
+import lands_game_copy as lg
 import lands_vars as lv
 
 
@@ -115,19 +115,27 @@ class raw_env(AECEnv, EzPickle):
         self.render_mode = render_mode
         self.screen_scaling = screen_scaling
 
-        self.board = [0] * (6 * 7)
+        # self.board = [0] * (6 * 7)
 
         self.agents = ["player_0", "player_1"]
         self.possible_agents = self.agents[:]
 
-        self.action_spaces = {i: spaces.Discrete(7) for i in self.agents}
+        self.game = lg.LandsGame()
+
+        self.action_spaces = {
+            i: spaces.MultiDiscrete(
+                # [4, 5, 2, 55, 5]
+                [4, 55]
+            )
+            for i in self.agents
+        }
         self.observation_spaces = {
             i: spaces.Dict(
                 {
                     "observation": spaces.Box(
-                        low=0, high=1, shape=(6, 7, 2), dtype=np.int8
+                        low=0, high=5, shape=(3,5), dtype=np.int8
                     ),
-                    "action_mask": spaces.Box(low=0, high=1, shape=(7,), dtype=np.int8),
+                    "action_mask": spaces.MultiDiscrete([4, 5, 2, 55, 5]),
                 }
             )
             for i in self.agents
@@ -150,21 +158,23 @@ class raw_env(AECEnv, EzPickle):
     #        [2, 0, 0, 0, 1, 1, 0],
     #        [1, 1, 2, 1, 0, 1, 0]], dtype=int8)
     def observe(self, agent):
-        board_vals = np.array(self.board).reshape(6, 7)
+        # board_vals = np.array(self.board).reshape(6, 7)
+        # cur_player = self.possible_agents.index(agent)
+        # opp_player = (cur_player + 1) % 2
+
+        # cur_p_board = np.equal(board_vals, cur_player + 1)
+        # opp_p_board = np.equal(board_vals, opp_player + 1)
+
+        # observation = np.stack([cur_p_board, opp_p_board], axis=2).astype(np.int8)
         cur_player = self.possible_agents.index(agent)
         opp_player = (cur_player + 1) % 2
+        legal_moves = self._legal_moves()
+        curr_hand = self.game.players[cur_player]["hand"]
+        curr_field = self.game.players[cur_player]["field"]
+        opp_field = self.game.players[opp_player]["field"]
+        observation = np.array([curr_hand, curr_field, opp_field])
 
-        cur_p_board = np.equal(board_vals, cur_player + 1)
-        opp_p_board = np.equal(board_vals, opp_player + 1)
-
-        observation = np.stack([cur_p_board, opp_p_board], axis=2).astype(np.int8)
-        legal_moves = self._legal_moves() if agent == self.agent_selection else []
-
-        action_mask = np.zeros(7, "int8")
-        for i in legal_moves:
-            action_mask[i] = 1
-
-        return {"observation": observation, "action_mask": action_mask}
+        return {"observation": observation, "action_mask": legal_moves}
 
     def observation_space(self, agent):
         return self.observation_spaces[agent]
@@ -173,39 +183,59 @@ class raw_env(AECEnv, EzPickle):
         return self.action_spaces[agent]
 
     def _legal_moves(self):
-        return [i for i in range(7) if self.board[i] == 0]
+        # action_mask = [[0]*4, [0]*5, [0]*2, [0]*55, [0]*5]
+        # for action in self.game.possible_actions:
+        #     action_choice = action[0]
+        #     action_data = action[action_choice]
+
+        #     action_mask[0][action_choice-1] = 1
+        #     action_mask[action_choice][action_data] = 1
+        # # print(action_mask)
+        # return action_mask
+        action_mask = [[0]*4, [0]*55]
+        for action in self.game.possible_actions:
+            action_choice = action[0]
+            action_data = action[1]
+
+            action_mask[0][action_choice] = 1
+            action_mask[1][action_data] = 1
+        return action_mask
 
     # action in this case is a value from 0 to 6 indicating position to move on the flat representation of the connect4 board
     def step(self, action):
-        if (
-            self.truncations[self.agent_selection]
-            or self.terminations[self.agent_selection]
-        ):
-            return self._was_dead_step(action)
-        # assert valid move
-        assert self.board[0:7][action] == 0, "played illegal move."
+        # if (
+        #     self.truncations[self.agent_selection]
+        #     or self.terminations[self.agent_selection]
+        # ):
+        #     return self._was_dead_step(action)
+        # # assert valid move
+        # assert self.board[0:7][action] == 0, "played illegal move."
 
-        piece = self.agents.index(self.agent_selection) + 1
-        for i in list(filter(lambda x: x % 7 == action, list(range(41, -1, -1)))):
-            if self.board[i] == 0:
-                self.board[i] = piece
-                break
+        # piece = self.agents.index(self.agent_selection) + 1
+        # for i in list(filter(lambda x: x % 7 == action, list(range(41, -1, -1)))):
+        #     if self.board[i] == 0:
+        #         self.board[i] = piece
+        #         break
+
+        curr_sub_turn = self.game.sub_turn
+
+        self.game.play_move(action)
 
         next_agent = self._agent_selector.next()
 
-        winner = self.check_for_winner()
+        winner = self.game.win()
 
         # check if there is a winner
         if winner:
             self.rewards[self.agent_selection] += 1
             self.rewards[next_agent] -= 1
             self.terminations = {i: True for i in self.agents}
-        # check if there is a tie
-        elif all(x in [1, 2] for x in self.board):
-            # once either play wins or there is a draw, game over, both players are done
-            self.terminations = {i: True for i in self.agents}
+        # # check if there is a tie
+        # elif all(x in [1, 2] for x in self.board):
+        #     # once either play wins or there is a draw, game over, both players are done
+        #     self.terminations = {i: True for i in self.agents}
 
-        self.agent_selection = next_agent
+        self.agent_selection = next_agent if self.game.sub_turn != curr_sub_turn else self.agent_selection
 
         self._accumulate_rewards()
 
@@ -214,7 +244,8 @@ class raw_env(AECEnv, EzPickle):
 
     def reset(self, seed=None, options=None):
         # reset environment
-        self.board = [0] * (6 * 7)
+        # self.board = [0] * (6 * 7)
+        self.game.reset_game()
 
         self.agents = self.possible_agents[:]
         self.rewards = {i: 0 for i in self.agents}
@@ -227,131 +258,81 @@ class raw_env(AECEnv, EzPickle):
 
         self.agent_selection = self._agent_selector.reset()
 
+    def close(self):
+        if self.screen is not None:
+            pygame.quit()
+            self.screen = None
+
+
     def render(self):
         if self.render_mode is None:
             gymnasium.logger.warn(
                 "You are calling render method without specifying any render mode."
             )
             return
+        
+        print(self.game)
 
-        screen_width = 99 * self.screen_scaling
-        screen_height = 86 / 99 * screen_width
+    #     screen_width = 99 * self.screen_scaling
+    #     screen_height = 86 / 99 * screen_width
 
-        if self.screen is None:
-            pygame.init()
+    #     if self.screen is None:
+    #         pygame.init()
 
-            if self.render_mode == "human":
-                pygame.display.set_caption("Connect Four")
-                self.screen = pygame.display.set_mode((screen_width, screen_height))
-            elif self.render_mode == "rgb_array":
-                self.screen = pygame.Surface((screen_width, screen_height))
+    #         if self.render_mode == "human":
+    #             pygame.display.set_caption("Connect Four")
+    #             self.screen = pygame.display.set_mode((screen_width, screen_height))
+    #         elif self.render_mode == "rgb_array":
+    #             self.screen = pygame.Surface((screen_width, screen_height))
 
-        # Load and scale all of the necessary images
-        tile_size = (screen_width * (91 / 99)) / 7
+    #     # Load and scale all of the necessary images
+    #     tile_size = (screen_width * (91 / 99)) / 7
 
-        red_chip = get_image(os.path.join("img", "C4RedPiece.png"))
-        red_chip = pygame.transform.scale(
-            red_chip, (int(tile_size * (9 / 13)), int(tile_size * (9 / 13)))
-        )
+    #     red_chip = get_image(os.path.join("img", "C4RedPiece.png"))
+    #     red_chip = pygame.transform.scale(
+    #         red_chip, (int(tile_size * (9 / 13)), int(tile_size * (9 / 13)))
+    #     )
 
-        black_chip = get_image(os.path.join("img", "C4BlackPiece.png"))
-        black_chip = pygame.transform.scale(
-            black_chip, (int(tile_size * (9 / 13)), int(tile_size * (9 / 13)))
-        )
+    #     black_chip = get_image(os.path.join("img", "C4BlackPiece.png"))
+    #     black_chip = pygame.transform.scale(
+    #         black_chip, (int(tile_size * (9 / 13)), int(tile_size * (9 / 13)))
+    #     )
 
-        board_img = get_image(os.path.join("img", "Connect4Board.png"))
-        board_img = pygame.transform.scale(
-            board_img, ((int(screen_width)), int(screen_height))
-        )
+    #     board_img = get_image(os.path.join("img", "Connect4Board.png"))
+    #     board_img = pygame.transform.scale(
+    #         board_img, ((int(screen_width)), int(screen_height))
+    #     )
 
-        self.screen.blit(board_img, (0, 0))
+    #     self.screen.blit(board_img, (0, 0))
 
-        # Blit the necessary chips and their positions
-        for i in range(0, 42):
-            if self.board[i] == 1:
-                self.screen.blit(
-                    red_chip,
-                    (
-                        (i % 7) * (tile_size) + (tile_size * (6 / 13)),
-                        int(i / 7) * (tile_size) + (tile_size * (6 / 13)),
-                    ),
-                )
-            elif self.board[i] == 2:
-                self.screen.blit(
-                    black_chip,
-                    (
-                        (i % 7) * (tile_size) + (tile_size * (6 / 13)),
-                        int(i / 7) * (tile_size) + (tile_size * (6 / 13)),
-                    ),
-                )
+    #     # Blit the necessary chips and their positions
+    #     for i in range(0, 42):
+    #         if self.board[i] == 1:
+    #             self.screen.blit(
+    #                 red_chip,
+    #                 (
+    #                     (i % 7) * (tile_size) + (tile_size * (6 / 13)),
+    #                     int(i / 7) * (tile_size) + (tile_size * (6 / 13)),
+    #                 ),
+    #             )
+    #         elif self.board[i] == 2:
+    #             self.screen.blit(
+    #                 black_chip,
+    #                 (
+    #                     (i % 7) * (tile_size) + (tile_size * (6 / 13)),
+    #                     int(i / 7) * (tile_size) + (tile_size * (6 / 13)),
+    #                 ),
+    #             )
 
-        if self.render_mode == "human":
-            pygame.event.pump()
-            pygame.display.update()
-            self.clock.tick(self.metadata["render_fps"])
+    #     if self.render_mode == "human":
+    #         pygame.event.pump()
+    #         pygame.display.update()
+    #         self.clock.tick(self.metadata["render_fps"])
 
-        observation = np.array(pygame.surfarray.pixels3d(self.screen))
+    #     observation = np.array(pygame.surfarray.pixels3d(self.screen))
 
-        return (
-            np.transpose(observation, axes=(1, 0, 2))
-            if self.render_mode == "rgb_array"
-            else None
-        )
-
-    def close(self):
-        if self.screen is not None:
-            pygame.quit()
-            self.screen = None
-
-    def check_for_winner(self):
-        board = np.array(self.board).reshape(6, 7)
-        piece = self.agents.index(self.agent_selection) + 1
-
-        # Check horizontal locations for win
-        column_count = 7
-        row_count = 6
-
-        for c in range(column_count - 3):
-            for r in range(row_count):
-                if (
-                    board[r][c] == piece
-                    and board[r][c + 1] == piece
-                    and board[r][c + 2] == piece
-                    and board[r][c + 3] == piece
-                ):
-                    return True
-
-        # Check vertical locations for win
-        for c in range(column_count):
-            for r in range(row_count - 3):
-                if (
-                    board[r][c] == piece
-                    and board[r + 1][c] == piece
-                    and board[r + 2][c] == piece
-                    and board[r + 3][c] == piece
-                ):
-                    return True
-
-        # Check positively sloped diagonals
-        for c in range(column_count - 3):
-            for r in range(row_count - 3):
-                if (
-                    board[r][c] == piece
-                    and board[r + 1][c + 1] == piece
-                    and board[r + 2][c + 2] == piece
-                    and board[r + 3][c + 3] == piece
-                ):
-                    return True
-
-        # Check negatively sloped diagonals
-        for c in range(column_count - 3):
-            for r in range(3, row_count):
-                if (
-                    board[r][c] == piece
-                    and board[r - 1][c + 1] == piece
-                    and board[r - 2][c + 2] == piece
-                    and board[r - 3][c + 3] == piece
-                ):
-                    return True
-
-        return False
+    #     return (
+    #         np.transpose(observation, axes=(1, 0, 2))
+    #         if self.render_mode == "rgb_array"
+    #         else None
+    #     )
