@@ -186,20 +186,16 @@ class LandsGame():
 
   # cards a player can play
   def cards_to_play_choices(self, player):
-    # return [self.create_action(lv.PLAY_CARD, i) for i in range(self.num_elements) # for each card type
-    #         if self.players[player]["hand"][i] > 0] # if the player has the card in their hand they can play it
     return [[lv.PLAY_CARD, i] for i in range(self.num_elements) # for each card type
             if self.players[player]["hand"][i] > 0] # if the player has the card in their hand they can play it
 
   # counter choices
   def counter_choices(self, player):
-    # legal_moves = [self.create_action(lv.COUNTER, 0)] # player can choose not to counter
     legal_moves = [[lv.COUNTER, 0]] # player can choose not to counter
     countered_card = self.players[player]["hand"][self.playing[-1]] # card played by the opponent
     num_water = self.players[player]["hand"][lv.WATER] # number of water cards in the player's hand
     needed_water = 2 if self.playing[-1] == lv.WATER else 1 # number of water cards needed to counter
     if num_water >= needed_water and countered_card > 0: # if the player has enough water cards and the card played by the opponent is in the player's hand
-      # legal_moves.append(self.create_action(lv.COUNTER, 1)) # player can choose to counter
       legal_moves.append([lv.COUNTER, 1]) # player can choose to counter
     return legal_moves # set the possible actions
     
@@ -218,7 +214,6 @@ class LandsGame():
     if len(self.players[player]["deck"]) < 1: # if the deck is empty
       self._put_discard_to_deck(player) # put the discard pile back into the deck
     self.scryed_card = self.players[player]["deck"][0] # set the scryed card
-    # return [self.create_action(lv.RESOLVE_CARD, i) for i in range(2)] # player can choose to keep the card on top or move it to the bottom
     return [[lv.RESOLVE_CARD, i] for i in range(2)] # player can choose to keep the card on top or move it to the bottom
 
   # opponent is playing black and you have to reveal 3 cards
@@ -231,38 +226,24 @@ class LandsGame():
         if reveal[i] < int(self.players[player]["hand"][i]): # if the player has enough of the card in their hand
           reveal[i] += 1 # add the card to the cards revealed
       if sum(reveal) == max_reveal: # if the player has revealed enough cards
-        # legal_moves.append(self.create_action(lv.REVEAL, lv.COMBINATION_TO_IDX[comb])) # add the combination to the possible actions
         legal_moves.append([lv.REVEAL, lv.COMBINATION_TO_IDX[comb]]) # add the combination to the possible actions
     return legal_moves # return the possible actions
 
   # playing dark and you have to choose a card to discard from the opponent's hand
   def pick_from_revealed_choices(self):
-    # return [self.create_action(lv.RESOLVE_CARD, i) for i in set(self.revealed_cards)] # can pick any of the cards revealed
     return [[lv.RESOLVE_CARD, i] for i in set(self.revealed_cards)] # can pick any of the cards revealed
 
   # playing grass and you have to choose a card to move from discard to hand
   def green_choices(self, player):
-    # return [self.create_action(lv.RESOLVE_CARD, i) for i in range(self.num_elements) # for each card type
-    #     if self.players[player]["discard"][i] > 0 # if the player has the card in the discard pile they can choose it
-    #   ]
     return [[lv.RESOLVE_CARD, i] for i in range(self.num_elements) # for each card type
         if self.players[player]["discard"][i] > 0 # if the player has the card in the discard pile they can choose it
       ]
 
   # playing fire and you have to choose a card to discard from the opponent's field 
   def fire_choices(self, player):
-    # return [self.create_action(lv.RESOLVE_CARD, i) for i in range(self.num_elements) # for each card type
-    #     if self.players[1-player]["field"][i] > 0 # if the opponent has the card in play you can choose it
-    #   ]
     return [[lv.RESOLVE_CARD, i] for i in range(self.num_elements) # for each card type
         if self.players[1-player]["field"][i] > 0 # if the opponent has the card in play you can choose it
       ]
-  
-  def create_action(self, action_choice, data):
-    action = [0] * 5 
-    action[0] = action_choice
-    action[action_choice] = data
-    return action
   
   def pass_sub_turn(self):  
     self.sub_turn = 1 - self.sub_turn

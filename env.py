@@ -135,7 +135,10 @@ class raw_env(AECEnv, EzPickle):
                     "observation": spaces.Box(
                         low=0, high=5, shape=(3,5), dtype=np.int8
                     ),
-                    "action_mask": spaces.MultiDiscrete([4, 5, 2, 55, 5]),
+                    "action_mask": spaces.MultiDiscrete(
+                        # [4, 5, 2, 55, 5]
+                        [4, 55]
+                    ),
                 }
             )
             for i in self.agents
@@ -192,7 +195,7 @@ class raw_env(AECEnv, EzPickle):
         #     action_mask[action_choice][action_data] = 1
         # # print(action_mask)
         # return action_mask
-        action_mask = [[0]*4, [0]*55]
+        action_mask = (np.array([0]*4, dtype=np.int8), np.array([0]*55, dtype=np.int8))
         for action in self.game.possible_actions:
             action_choice = action[0]
             action_data = action[1]
@@ -203,11 +206,11 @@ class raw_env(AECEnv, EzPickle):
 
     # action in this case is a value from 0 to 6 indicating position to move on the flat representation of the connect4 board
     def step(self, action):
-        # if (
-        #     self.truncations[self.agent_selection]
-        #     or self.terminations[self.agent_selection]
-        # ):
-        #     return self._was_dead_step(action)
+        if (
+            self.truncations[self.agent_selection]
+            or self.terminations[self.agent_selection]
+        ):
+            return self._was_dead_step(action)
         # # assert valid move
         # assert self.board[0:7][action] == 0, "played illegal move."
 
@@ -219,11 +222,15 @@ class raw_env(AECEnv, EzPickle):
 
         curr_sub_turn = self.game.sub_turn
 
+        print('before ', self.agent_selection)
+        print('before ', self.game.sub_turn)
         self.game.play_move(action)
+
 
         next_agent = self._agent_selector.next()
 
         winner = self.game.win()
+        print(winner)
 
         # check if there is a winner
         if winner:
@@ -235,7 +242,10 @@ class raw_env(AECEnv, EzPickle):
         #     # once either play wins or there is a draw, game over, both players are done
         #     self.terminations = {i: True for i in self.agents}
 
-        self.agent_selection = next_agent if self.game.sub_turn != curr_sub_turn else self.agent_selection
+        self.agent_selection = self.possible_agents[self.game.sub_turn]
+
+        print('after ', self.agent_selection)
+        print('after ', self.game.sub_turn)
 
         self._accumulate_rewards()
 
@@ -245,6 +255,7 @@ class raw_env(AECEnv, EzPickle):
     def reset(self, seed=None, options=None):
         # reset environment
         # self.board = [0] * (6 * 7)
+        print("RESET")
         self.game.reset_game()
 
         self.agents = self.possible_agents[:]
