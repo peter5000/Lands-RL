@@ -2,18 +2,6 @@ import numpy as np
 import lands_vars as lv
 from itertools import combinations_with_replacement
 
-def parse_action_data(action_tuple):
-  action_type, action_data = action_tuple
-  res = {
-    "action": action_type,
-    "play_card": None,
-    "counter": None,
-    "reveal": None,
-    "resolve_card": None
-  }
-  res[action_type] = action_data
-  return res
-
 class LandsGame():
   def __init__(self, num_elements=lv.NUM_ELEMENTS, num_cards=lv.NUM_CARDS, start_hand=lv.START_HAND, player_count = lv.PLAYER_COUNT):
     # Game meta variables initialization
@@ -47,7 +35,7 @@ class LandsGame():
       self.draw_n(i, self.start_hand)
 
     # quantity of each card revealed for black
-    self.revealed_cards = np.zeros((1, lv.NUM_ELEMENTS)) 
+    self.revealed_cards = None
 
     # cards played over course of turn
     self.playing = []
@@ -60,204 +48,203 @@ class LandsGame():
 
 
 
-  def play_move(self, action_data):
-    action = action_data["action"]
-    action_data = action_data[action]
+  def play_move(self, action):
+    """
+    Play a move in the game
 
-    # needs to manage state of the game
-    match action:
-      case "play_card":
-        # action_data will be the card played
+    Args:
+    action: list of integers, the action to play
+    """
+    action_choice = action[0] # the type of action
+    action_data = action[1] # the data associated with the action
 
-        self.playing = [action_data]
-        # update subturn to the player who has a chance to counter
-        self.pass_sub_turn()
-        # opponent has a chance to counter
-        self.possible_actions = self.counter_choices(self.sub_turn)
+    # update the game state based on the action
+    match action_choice:
+
+      # case the player plays a card
+      # action_data is the type of card played
+      case lv.PLAY_CARD:
+        self.playing = [action_data] # set the card played
+        self.pass_sub_turn() # update subturn to the player who has a chance to counter
+        self.possible_actions = self.counter_choices(self.sub_turn) # give opponent a chance to counter
       
-      case "counter":
-        # action_data will be 0 or 1
-
-        if action_data == 1:
-          self.counter(self.sub_turn)
-          # other player has a chance to counter
-          self.pass_sub_turn()
-          self.possible_actions = self.counter_choices(self.sub_turn)
-
-        else:
-          # if it is the same player's turn and self.countered is true, then the counter went through
-          # and it becomes the next player's turn
-          if self.turn == self.sub_turn and self.countered:
-            self._move_x_to_x(self.turn, "hand", "discard", self.playing[0])
-            self.pass_turn()
-            
-          # if it is the same player's turn and self.countered is false, then the card goes through
-          else:
-            self.resolve_card_init()
+      # case the player takes a counter action
+      # action_data is 1 if the player chooses to counter, 0 if not
+      case lv.COUNTER:
+        if action_data == 1: # if the player chooses to counter
+          self.counter(self.sub_turn) # counter the card
+          self.pass_sub_turn() # update subturn to the player who has a chance to counter
+          self.possible_actions = self.counter_choices(self.sub_turn) # give opponent a chance to counter
+        else: # if the player chooses not to counter
+          if self.turn == self.sub_turn and self.countered: # if the counter went through
+            self._move_x_to_x(self.turn, "hand", "discard", self.playing[0])  # discard the card played that was countered
+            self.pass_turn() # pass the turn
+          else: # if the counter doesn't go through
+            self.resolve_card_init() # resolve the card played
           
-      case "reveal":
-        # action_data will be a list of 5 integers representing the number of each card to reveal
+      # case a player reveals cards
+      # action_data is a combination index tied to the cards revealed
+      case lv.REVEAL:
+        self.revealed_cards = lv.IDX_TO_COMBINATION[action_data] # set the cards revealed
+        self.sub_turn = self.turn # update subturn to the player who has to pick a card
+        self.possible_actions = self.pick_from_revealed_choices() # player must pick from the revealed cards
 
-        # TODO verify moves
-        self.revealed_cards = action_data
-        # update subturn to the player who has to pick
-        self.sub_turn = self.turn
-        # player must pick from revealed cards
-        self.possible_actions = self.pick_from_revealed_choices(self.turn)
+      # case a player resolves a card
+      # action_data is the choice associated with the card resolution
+      case lv.RESOLVE_CARD:
+        self.resolve_card_final(action_data) # resolve the card played
 
-      case "resolve_card":
-        # action_data will be the card to resolve
-
-        self.resolve_card_final(action_data)
     return (self.possible_actions, self.turn, self.sub_turn)
 
-        
-
-
   def resolve_card_init(self):
-    self.sub_turn = self.turn
-    self._move_x_to_x(self.turn, "hand", "field", self.playing[0])
+    """
+    Resolve the card played
+    """
+    self.sub_turn = self.turn # update subturn to the player who has to resolve the card
+    self._move_x_to_x(self.turn, "hand", "field", self.playing[0]) # move the card played to the field
 
     # resolve the card
     match self.playing[0]:
+
+      # case the player plays a grass card
       case lv.GRASS:
-        if np.any(self.players[self.turn]["discard"] > 0):
-          self.possible_actions = self.green_choices(self.turn)
-        else:
-          self.pass_turn()
+        if np.any(self.players[self.turn]["discard"] > 0): # if the player has cards in the discard pile
+          self.possible_actions = self.green_choices(self.turn) # player must choose a card to move from discard to hand
+        else: # if the player has no cards in the discard pile
+          self.pass_turn() # pass the turn
+
+      # case the player plays a yellow card
       case lv.YELLOW:
-        self.draw_n(self.turn, n=1)
-        self.pass_turn()
+        self.draw_n(self.turn, n=1) # draw a card
+        self.pass_turn() # pass the turn
+
+      # case the player plays a fire card
       case lv.FIRE:
-        if np.any(self.players[1-self.turn]["field"] > 0):
-          self.possible_actions = self.fire_choices(self.turn)
-        else:
-          self.pass_turn()
+        if np.any(self.players[1-self.turn]["field"] > 0): # if the opponent has cards in play
+          self.possible_actions = self.fire_choices(self.turn) # player must choose a card to discard from the opponent's field
+        else: # if the opponent has no cards in play
+          self.pass_turn() # pass the turns
+
+      # case the player plays a dark card
       case lv.DARK:
-        if np.any(self.players[1-self.turn]["hand"] > 0):
-          # playing black so opponent has to reveal cards
-          self.pass_sub_turn()
-          self.possible_actions = self.reveal_card_choices(self.sub_turn)
-        else:
-          self.pass_turn()
+        if np.any(self.players[1-self.turn]["hand"] > 0): # if the opponent has cards in their hand
+          self.pass_sub_turn() # update subturn to the player who has to reveal cards
+          self.possible_actions = self.reveal_card_choices(self.sub_turn) # player must reveal cards
+        else: # if the opponent has no cards in their hand
+          self.pass_turn() # pass the turn
+
+      # case the player plays a water card
       case lv.WATER:
-        # playing water so you scry
-        self.possible_actions = self.scry_choices(self.turn)
+        self.possible_actions = self.scry_choices(self.turn) # player must scry
+
 
   def resolve_card_final(self, action_data):
+
+    # resolve the card
     match self.playing[0]:
+
+      # case the player plays a grass card
       case lv.GRASS:
-        self._move_x_to_x(self.turn, "discard", "hand", action_data)
+        self._move_x_to_x(self.turn, "discard", "hand", action_data) # move the choosen card from discard to hand
+
+      # case the player plays a fire card
       case lv.FIRE:
-        self._move_x_to_x(1-self.turn, "field", "discard", action_data)
+        self._move_x_to_x(1-self.turn, "field", "discard", action_data) # discard the card selected from the opponent's field
+
+      # case the player plays a dark card
       case lv.DARK:
-        self._move_x_to_x(1-self.turn, "hand", "discard", action_data)
+        self._move_x_to_x(1-self.turn, "hand", "discard", action_data) # discard the card selected from the opponent's hand
+
+      # case the player plays a water card
       case lv.WATER:
-        if action_data == 1:
-          self.move_top_card_to_bottom(self.turn)
+        if action_data == 1: # if the player chooses to moves the card
+          self.move_top_card_to_bottom(self.turn) # move the top card to the bottom of the deck
     
     self.pass_turn()
 
   def pass_turn(self):
-    # TODO: check for win condition and endgame
-
     # check for win condition
     winner = self.win()
     if winner is not None:
-      print(f"Player {winner} wins!")
       self.gameover = True
       return
     self.turn = 1 - self.turn
     self.sub_turn = self.turn
-    self.playing = []
-    self.countered = False
-    self.scryed_card = None
-    self.revealed_cards = np.zeros((1, lv.NUM_ELEMENTS))
+    self.reset_vars()
     self.draw_n(self.turn, n=1)
     self.possible_actions = self.cards_to_play_choices(self.turn)
 
-  def pass_sub_turn(self):  
-    self.sub_turn = 1 - self.sub_turn
+  def reset_vars(self):
+    self.playing = []
+    self.countered = False
+    self.scryed_card = None
+    self.revealed_cards = None
 
+  # cards a player can play
   def cards_to_play_choices(self, player):
-    return [("play_card", i) for i in range(self.num_elements) if self.players[player]["hand"][i] > 0]
+    return [[lv.PLAY_CARD, i] for i in range(self.num_elements) # for each card type
+            if self.players[player]["hand"][i] > 0] # if the player has the card in their hand they can play it
 
+  # counter choices
   def counter_choices(self, player):
-    legal_moves = []
-    # if the player has a water card and the card the opponent played
-    # TODO fix for case for 2 water as they only need 1 now
-    countered_card = self.players[player]["hand"][self.playing[-1]]
-    num_water = self.players[player]["hand"][lv.WATER]
-    needed_water = 2 if self.playing[-1] == lv.WATER else 1
-    if num_water >= needed_water and countered_card > 0:
-      legal_moves.append(("counter", 1))
-    legal_moves.append(("counter", 0))
-    return legal_moves
+    legal_moves = [[lv.COUNTER, 0]] # player can choose not to counter
+    countered_card = self.players[player]["hand"][self.playing[-1]] # card played by the opponent
+    num_water = self.players[player]["hand"][lv.WATER] # number of water cards in the player's hand
+    needed_water = 2 if self.playing[-1] == lv.WATER else 1 # number of water cards needed to counter
+    if self.turn == self.sub_turn and self.playing[0] == lv.WATER: # if it is the current player's turn and the card played is water
+      needed_water += 1 # the player needs an extra water card to counter
+    if num_water >= needed_water and countered_card > 0: # if the player has enough water cards and the card played by the opponent is in the player's hand
+      legal_moves.append([lv.COUNTER, 1]) # player can choose to counter
+    return legal_moves # set the possible actions
     
   # counter a card played by the opponent
   def counter(self, player):
-    
-    # discard the cards used to counter
-    self._move_x_to_x(player, "hand", "discard", self.playing[-1])
-    self._move_x_to_x(player, "hand", "discard", lv.WATER)
-
-    # add water to playing
-    self.playing.append(lv.WATER)
-
-    # if it is the same player's turn, then the counter was countered
-    if self.turn == self.sub_turn:
-      self.countered = False
-    # if it is the opponent's turn, then the counter was successful
-    else:
-      self.countered = True
+    self._move_x_to_x(player, "hand", "discard", self.playing[-1]) # discard the card played by the opponent
+    self._move_x_to_x(player, "hand", "discard", lv.WATER) # discard water
+    self.playing.append(lv.WATER) # add water to the cards played
+    if self.turn == self.sub_turn: # if it is the currents player's turn
+      self.countered = False # the counter was countered
+    else: # if it is the opponent's turn
+      self.countered = True # the counter went through
 
   # playing water and you scry
   def scry_choices(self, player):
-    if len(self.players[player]["deck"]) < 1:
-      self._put_discard_to_deck(player)
-      assert len(self.players[player]["deck"]) > 0    # We want deck to contain at least 1 card
-    self.scryed_card = self.players[player]["deck"][0]
-
-    return [("resolve_card", i) for i in range(2)]
-
+    if len(self.players[player]["deck"]) < 1: # if the deck is empty
+      self._put_discard_to_deck(player) # put the discard pile back into the deck
+    self.scryed_card = self.players[player]["deck"][0] # set the scryed card
+    return [[lv.RESOLVE_CARD, i] for i in range(2)] # player can choose to keep the card on top or move it to the bottom
 
   # opponent is playing black and you have to reveal 3 cards
   def reveal_card_choices(self, player):
-    legal_moves = []
-   
-    hand_counts = [int(self.players[player]["hand"][i]) for i in range(5)]
-    max_reveal = min(3, sum(hand_counts))
+    legal_moves = [] # possible actions
+    max_reveal = min(3, np.sum(self.players[player]["hand"])) # maximum number of cards the player can reveal
+    for comb in combinations_with_replacement(range(5), int(max_reveal)): # for each combination of cards the player can reveal
+      reveal = [0] * 5 # initialize the cards revealed
+      for i in comb: # for each card in the combination
+        if reveal[i] < int(self.players[player]["hand"][i]): # if the player has enough of the card in their hand
+          reveal[i] += 1 # add the card to the cards revealed
+      if sum(reveal) == max_reveal: # if the player has revealed enough cards
+        legal_moves.append([lv.REVEAL, lv.COMBINATION_TO_IDX[comb]]) # add the combination to the possible actions
+    return legal_moves # return the possible actions
 
-    for comb in combinations_with_replacement(range(5), max_reveal):
-      reveal = [0] * 5
-      for idx in comb:
-        if reveal[idx] < hand_counts[idx]:
-          reveal[idx] += 1
-      if sum(reveal) == max_reveal:
-        legal_moves.append(("reveal", reveal.copy()))
-    return legal_moves
-
-  # playing dark and you have to pick a card to move from discard to hand
-  def pick_from_revealed_choices(self, player):
-
-    # return a list of the cards that can be picked
-    return [
-      ("resolve_card", i) for i in range(self.num_elements)
-        if self.revealed_cards[i] > 0
-      ]
+  # playing dark and you have to choose a card to discard from the opponent's hand
+  def pick_from_revealed_choices(self):
+    return [[lv.RESOLVE_CARD, i] for i in set(self.revealed_cards)] # can pick any of the cards revealed
 
   # playing grass and you have to choose a card to move from discard to hand
   def green_choices(self, player):
-    return [
-      ("resolve_card", i) for i in range(self.num_elements)
-        if self.players[player]["discard"][i] > 0
+    return [[lv.RESOLVE_CARD, i] for i in range(self.num_elements) # for each card type
+        if self.players[player]["discard"][i] > 0 # if the player has the card in the discard pile they can choose it
       ]
 
-  # playing fire and you have to choose a card to move from opponent's field to discard
+  # playing fire and you have to choose a card to discard from the opponent's field 
   def fire_choices(self, player):
-    return [("resolve_card", i) for i in range(self.num_elements)
-        if self.players[1-player]["field"][i] > 0
+    return [[lv.RESOLVE_CARD, i] for i in range(self.num_elements) # for each card type
+        if self.players[1-player]["field"][i] > 0 # if the opponent has the card in play you can choose it
       ]
+  
+  def pass_sub_turn(self):  
+    self.sub_turn = 1 - self.sub_turn
   
   # move the top card to the bottom of the deck
   def move_top_card_to_bottom(self, player):
@@ -282,12 +269,12 @@ class LandsGame():
     self.players[player]["deck"] = np.append(self.players[player]["deck"], discard_cards)
     self.players[player]["discard"].fill(0)
     self._shuffle_deck(player)
+    assert len(self.players[player]["deck"]) > 0    # We want deck to contain at least 1 card
 
   # Draw n cards from the deck to the hand
   def draw_n(self, player, n=1):
     if len(self.players[player]["deck"]) < 1:
       self._put_discard_to_deck(player)
-      assert len(self.players[player]["deck"]) > 0    # We want deck to contain at least 1 card
     for i in range(n):
       self.players[player]["hand"][self.players[player]["deck"][i]-1] += 1
     self.players[player]["deck"] = self.players[player]["deck"][n:]
@@ -305,9 +292,11 @@ class LandsGame():
     for i in range(self.player_count):
       self._reset_states(i)
     self.turn = 0
+    self.sub_turn = self.turn
     self.gameover = False
-    # self._reset_states(self.p1)
-    # self._reset_states(self.p2)
+    self.reset_vars()
+    self.possible_actions = self.cards_to_play_choices(self.turn)
+
 
   # Retrieve the board in a format:
   # row 1: player 1's hand,
@@ -315,8 +304,14 @@ class LandsGame():
   # row 3: player 2's field
   # row 4: player 2's hand,
   def _get_board(self):
-
-    return np.stack((self.players[0]["hand"], self.players[0]["field"], self.players[1]["field"], self.players[1]["hand"]))
+    return np.stack(
+      (
+        self.players[0]["hand"],
+        self.players[0]["field"],
+        self.players[1]["field"],
+        self.players[1]["hand"]
+      )
+    )
 
   # check for a win con and return a player number of the winner else none
   def win(self):
