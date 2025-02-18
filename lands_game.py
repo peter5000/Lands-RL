@@ -135,7 +135,10 @@ class LandsGame():
 
       # case the player plays a water card
       case lv.WATER:
-        self.possible_actions = self.scry_choices(self.turn) # player must scry
+        if np.any(self.players[self.turn]["deck"] > 0) or np.any(self.players[self.turn]["discard"] > 0): # if the player has cards in the deck or discard pile
+          self.possible_actions = self.scry_choices(self.turn) # player must scry
+        else: # if the player has no cards in the deck or discard pile
+          self.pass_turn()
 
 
   def resolve_card_final(self, action_data):
@@ -257,27 +260,30 @@ class LandsGame():
 
   # Initialize deck
   def _init_deck(self, player):
-    self.players[player]["deck"] = np.array([i//(self.num_cards) + 1 for i in range(self.num_elements*self.num_cards)], dtype=np.int8)
+    self.players[player]["deck"] = np.array([i//(self.num_cards) for i in range(self.num_elements*self.num_cards)], dtype=np.int8)
     self._shuffle_deck(player)
 
+  # TODO handle case if there are no cards in deck or discard
   # Add all cards in discard pile to the deck and shuffle
   # return (new_deck, new_discard)
   def _put_discard_to_deck(self, player):
     discard_cards = []
     for n, i in enumerate(self.players[player]["discard"]):
-      discard_cards.extend([n+1] * int(i))
+      discard_cards.extend([n] * int(i))
     self.players[player]["deck"] = np.append(self.players[player]["deck"], discard_cards)
     self.players[player]["discard"].fill(0)
     self._shuffle_deck(player)
-    assert len(self.players[player]["deck"]) > 0    # We want deck to contain at least 1 card
+    # assert len(self.players[player]["deck"]) > 0    # We want deck to contain at least 1 card
 
+  # TODO fix this for case where the deck becomes empty while drawing
   # Draw n cards from the deck to the hand
   def draw_n(self, player, n=1):
     if len(self.players[player]["deck"]) < 1:
       self._put_discard_to_deck(player)
-    for i in range(n):
-      self.players[player]["hand"][self.players[player]["deck"][i]-1] += 1
-    self.players[player]["deck"] = self.players[player]["deck"][n:]
+    if len(self.players[player]["deck"]) >= n:
+      for i in range(n):
+        self.players[player]["hand"][self.players[player]["deck"][i]] += 1
+      self.players[player]["deck"] = self.players[player]["deck"][n:]
 
   # Reset the state of a given player
   def _reset_states(self, player):
