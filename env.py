@@ -115,6 +115,8 @@ class raw_env(AECEnv, EzPickle):
         self.agents = ["player_0", "player_1"]
         self.possible_agents = self.agents[:]
 
+        self.last_action = None
+
         self.game = lg.LandsGame()
 
         self.action_spaces = {
@@ -127,7 +129,7 @@ class raw_env(AECEnv, EzPickle):
             i: spaces.Dict(
                 {
                     "observation": spaces.Box(
-                        low=0, high=5, shape=(3,5), dtype=np.int8
+                        low=0, high=6, shape=(7,5), dtype=np.int8
                     ),
                     "action_mask": spaces.MultiDiscrete(
                         [4, 55]
@@ -160,7 +162,18 @@ class raw_env(AECEnv, EzPickle):
         curr_hand = self.game.players[cur_player]["hand"]
         curr_field = self.game.players[cur_player]["field"]
         opp_field = self.game.players[opp_player]["field"]
-        observation = np.array([curr_hand, curr_field, opp_field])
+        # curr_discard = self.game.players[cur_player]["discard"]
+        # opp_discard = self.game.players[opp_player]["discard"]
+        curr_action = [self.game.playing[0] if self.game.playing else 5] * 5
+        scryed_card = [0]*5
+        if self.game.scryed_card:
+            scryed_card[self.game.scryed_card] = 1
+        revealed = [0]*5
+        if self.game.revealed_cards:
+            for i in self.game.revealed_cards:
+                revealed[i] += 1
+        counter = [1 if self.game.countered else 0] * 5
+        observation = np.array([curr_hand, curr_field, opp_field, curr_action, revealed, counter, scryed_card])
 
         return {"observation": observation, "action_mask": legal_moves}
 
@@ -190,6 +203,8 @@ class raw_env(AECEnv, EzPickle):
         
         self.game.play_move(action)
 
+        self.last_action = action
+
         winner = self.game.win()
 
         # check if there is a winner
@@ -209,6 +224,8 @@ class raw_env(AECEnv, EzPickle):
         # reset environment
    
         self.game.reset_game()
+
+        self.last_action = None
 
         self.agents = self.possible_agents[:]
         self.rewards = {i: 0 for i in self.agents}
@@ -234,4 +251,21 @@ class raw_env(AECEnv, EzPickle):
             )
             return
         
-        # print(self.game)
+        print("-"*50)
+        print(f"Current Turn: {self.game.turn}")
+        print(f"Current Sub Turn: {self.game.sub_turn}")
+        print(f"Last Action: {self.last_action}")
+        print(f"Current Playing: {self.game.playing[0] if self.game.playing else None}")
+        print(f"Current Counter Status: {self.game.countered}")
+        print(f"Current Revealed Cards: {self.game.revealed_cards}")
+        print(f"Current Scryed Card: {self.game.scryed_card}")
+        print(f"Current Possible Actions: {self.game.possible_actions}")
+        print("-" * 50)
+        print(f"{'Player':<10}{'Hand':<20}{'Field':<20}{'Discard':<20}")
+        print(f"{'-'*10}{'-'*20}{'-'*20}{'-'*20}")
+        print(lv.ELEMENTS)
+        for i in range(2):
+            print(f"{f'Player_{i}':<10}{str(self.game.players[i]['hand']):<20}{str(self.game.players[i]['field']):<20}{str(self.game.players[i]['discard']):<20}")
+        
+
+

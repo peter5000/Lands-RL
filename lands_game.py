@@ -123,7 +123,7 @@ class LandsGame():
         if np.any(self.players[1-self.turn]["field"] > 0): # if the opponent has cards in play
           self.possible_actions = self.fire_choices(self.turn) # player must choose a card to discard from the opponent's field
         else: # if the opponent has no cards in play
-          self.pass_turn() # pass the turns
+          self.pass_turn() # pass the turn
 
       # case the player plays a dark card
       case lv.DARK:
@@ -138,7 +138,7 @@ class LandsGame():
         if np.any(self.players[self.turn]["deck"] > 0) or np.any(self.players[self.turn]["discard"] > 0): # if the player has cards in the deck or discard pile
           self.possible_actions = self.scry_choices(self.turn) # player must scry
         else: # if the player has no cards in the deck or discard pile
-          self.pass_turn()
+          self.pass_turn() # pass the turn
 
 
   def resolve_card_final(self, action_data):
@@ -162,20 +162,26 @@ class LandsGame():
       case lv.WATER:
         if action_data == 1: # if the player chooses to moves the card
           self.move_top_card_to_bottom(self.turn) # move the top card to the bottom of the deck
-    
-    self.pass_turn()
+    try:
+      self.pass_turn() # pass the turn
+    except:
+      print(self._get_board())
+      print(action_data)
+      print(self.playing)
+      print(self.turn)
+      print(self.sub_turn)
+      print(self.possible_actions)
 
   def pass_turn(self):
-    # check for win condition
-    winner = self.win()
-    if winner is not None:
-      self.gameover = True
+    winner = self.win() # check for a win con
+    if winner is not None: # if there is a winner
+      self.gameover = True  # set the gameover flag
       return
-    self.turn = 1 - self.turn
-    self.sub_turn = self.turn
-    self.reset_vars()
-    self.draw_n(self.turn, n=1)
-    self.possible_actions = self.cards_to_play_choices(self.turn)
+    self.turn = 1 - self.turn # switch the turn
+    self.sub_turn = self.turn  # update subturn to the current player
+    self.reset_vars() # reset the game state variables
+    self.draw_n(self.turn, n=1) # draw a card for turn
+    self.possible_actions = self.cards_to_play_choices(self.turn) # set the opponent's choices
 
   def reset_vars(self):
     self.playing = []
@@ -210,7 +216,7 @@ class LandsGame():
     else: # if it is the opponent's turn
       self.countered = True # the counter went through
 
-  # playing water and you scry
+  # playing water and you scry (assumes you have cards in deck or discard)
   def scry_choices(self, player):
     if len(self.players[player]["deck"]) < 1: # if the deck is empty
       self._put_discard_to_deck(player) # put the discard pile back into the deck
@@ -263,9 +269,7 @@ class LandsGame():
     self.players[player]["deck"] = np.array([i//(self.num_cards) for i in range(self.num_elements*self.num_cards)], dtype=np.int8)
     self._shuffle_deck(player)
 
-  # TODO handle case if there are no cards in deck or discard
   # Add all cards in discard pile to the deck and shuffle
-  # return (new_deck, new_discard)
   def _put_discard_to_deck(self, player):
     discard_cards = []
     for n, i in enumerate(self.players[player]["discard"]):
@@ -273,17 +277,16 @@ class LandsGame():
     self.players[player]["deck"] = np.append(self.players[player]["deck"], discard_cards)
     self.players[player]["discard"].fill(0)
     self._shuffle_deck(player)
-    # assert len(self.players[player]["deck"]) > 0    # We want deck to contain at least 1 card
 
-  # TODO fix this for case where the deck becomes empty while drawing
   # Draw n cards from the deck to the hand
   def draw_n(self, player, n=1):
-    if len(self.players[player]["deck"]) < 1:
-      self._put_discard_to_deck(player)
-    if len(self.players[player]["deck"]) >= n:
-      for i in range(n):
-        self.players[player]["hand"][self.players[player]["deck"][i]] += 1
-      self.players[player]["deck"] = self.players[player]["deck"][n:]
+    for _ in range(n): # draw n cards
+      if len(self.players[player]["deck"]) < 1: # if the deck is empty
+        self._put_discard_to_deck(player) # put the discard pile back into the deck
+      if len(self.players[player]["deck"]) < 1: # if the deck is still empty
+        return # stop drawing
+      self.players[player]["hand"][self.players[player]["deck"][0]] += 1 # draw the card
+      self.players[player]["deck"] = self.players[player]["deck"][1:] # remove the card from the deck
 
   # Reset the state of a given player
   def _reset_states(self, player):
@@ -334,7 +337,7 @@ class LandsGame():
         self.players[player][start][element] -= 1
         self.players[player][dest][element] += 1
       else:
-        print(f"Player {player+1} doesn't have {lv.ELEMENTS[element]} at {start}")
+        print(f"Player_{player} doesn't have {lv.ELEMENTS[element]} at {start}")
 
   def __repr__(self):
     return "board: " + str(self._get_board())
